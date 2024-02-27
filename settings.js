@@ -248,10 +248,10 @@ module.exports = {
          */
         tours: false,
         page: {
-            title: "blinky-bus-serial-tray"
+            title: "trackpaw-tray"
         },
         header: {
-            title: "blinky-bus-serial-tray"
+            title: "trackpaw-tray"
          },
     
 
