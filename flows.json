@@ -432,7 +432,7 @@
         "type": "function",
         "z": "b438688e0b293257",
         "name": "Publish tray",
-        "func": "if (!msg.payload) return null;\nvar tray = flow.get('tray');\nif (tray == null) return null;\nvar newMsg = \n{\n    topic: flow.get('trayProps').box + '/tray/' + flow.get('trayProps').type + '/' + flow.get('trayProps').name + '/archive',\n    payload: JSON.stringify(tray)\n};\nreturn  newMsg;  \n",
+        "func": "if (!msg.payload) return null;\nvar tray = flow.get('tray');\nif (tray == null) return null;\nif (tray.calState.value > 0) return null;\nvar newMsg = \n{\n    topic: flow.get('trayProps').box + '/tray/' + flow.get('trayProps').type + '/' + flow.get('trayProps').name + '/archive',\n    payload: JSON.stringify(tray)\n};\nreturn  newMsg;  \n",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
@@ -441,7 +441,9 @@
         "x": 610,
         "y": 740,
         "wires": [
-            []
+            [
+                "5de5dfce91a29ad6"
+            ]
         ]
     },
     {
@@ -449,7 +451,7 @@
         "type": "function",
         "z": "b438688e0b293257",
         "name": "Create Setting",
-        "func": "let normalSettingMsg = null;\nlet trayControlMessage = null;\nlet tray = flow.get('tray');\nif (tray == null) return [normalSettingMsg,trayControlMessage];\n\nswitch (msg.payload.cube) \n{\n    case 'alias':\n        tray.alias.value = msg.payload.value;\n        normalSettingMsg = { topic: 'newData', payload: true };\n       break;\n    case 'trayControl':\n        switch(msg.payload.value)\n        {\n            case 0:\n                tray.trayControl.value = 0;\n                break;\n            case 1:\n                tray.trayControl.value = -1;\n                break;\n            case 2:\n                if (tray.trayControl.value > 0)\n                {\n                    tray.trayControl.value = 2;\n                    let trayProps  = flow.get('trayProps');\n                    node.warn(\"Asking for tray from database\");\n                    trayControlMessage =\n                    {\n                        topic: trayProps.box + '/tray/' + trayProps.type + '/' + trayProps.name + '/echo',\n                        payload: JSON.stringify({ topic: trayProps.box + '/tray/' + trayProps.type + '/' + trayProps.name + '/setting/echo' })\n                    };\n                }\n                break;\n            default:\n                tray.trayControl.value = 0;\n                break;\n        }\n        normalSettingMsg = { topic: 'newData', payload: true };\n       break;\n    default:\n        break;\n}\nreturn [normalSettingMsg,trayControlMessage];\n\n",
+        "func": "let normalSettingMsg = null;\nlet trayControlMessage = null;\nlet tray = flow.get('tray');\nif (tray == null) return [normalSettingMsg,trayControlMessage];\n\nswitch (msg.payload.cube) \n{\n    case 'alias':\n        tray.alias.value = msg.payload.value;\n        normalSettingMsg = { topic: 'newData', payload: true };\n       break;\n    case 'calWeight':\n        tray.calWeight.value = msg.payload.value;\n        normalSettingMsg = { topic: 'newData', payload: true };\n       break;\n    case 'calState':\n        tray.calState.value = msg.payload.value;\n        normalSettingMsg = { topic: 'newData', payload: true };\n       break;\n    case 'trayControl':\n        switch(msg.payload.value)\n        {\n            case 0:\n                tray.trayControl.value = 0;\n                break;\n            case 1:\n                tray.trayControl.value = -1;\n                break;\n            case 2:\n                if (tray.trayControl.value > 0)\n                {\n                    tray.trayControl.value = 2;\n                    let trayProps  = flow.get('trayProps');\n                    node.warn(\"Asking for tray from database\");\n                    trayControlMessage =\n                    {\n                        topic: trayProps.box + '/tray/' + trayProps.type + '/' + trayProps.name + '/echo',\n                        payload: JSON.stringify({ topic: trayProps.box + '/tray/' + trayProps.type + '/' + trayProps.name + '/setting/echo' })\n                    };\n                }\n                break;\n            default:\n                tray.trayControl.value = 0;\n                break;\n        }\n        normalSettingMsg = { topic: 'newData', payload: true };\n       break;\n    default:\n        break;\n}\nreturn [normalSettingMsg,trayControlMessage];\n\n",
         "outputs": 2,
         "noerr": 0,
         "initialize": "",
@@ -622,17 +624,20 @@
         "type": "function",
         "z": "b438688e0b293257",
         "name": "Check Reading",
-        "func": "let tray = flow.get('tray');\nlet caltray = flow.get('caltray');\nif ((tray == null ) || (caltray == null )) return null;\nlet trayProps = flow.get('trayProps');\n\nlet padData = [];\nlet npts = trayProps.nrows * trayProps.ncols;\nfor (let ii = 0; ii < npts; ++ii)\n{\n    let dataView  = new DataView(new ArrayBuffer(2));\n    for (let ib = 0; ib < 2; ++ib)   dataView.setUint8(ib, msg.payload[(ii * 2) + 1 - ib]);\n    padData.push(dataView.getInt16(0));\n}\nlet totalWeight = 0.0;\nvar avgRow = 0.0;\nvar avgCol = 0.0;\nfor (let ii = 0; ii < npts; ++ii)\n{\n    let rawWeight = caltray.calWeight.value * (padData[ii] - caltray.padZeroData.value[1][ii]) / (caltray.padCalData.value[1][ii] - caltray.padZeroData.value[1][ii]);\n    totalWeight = totalWeight + rawWeight;\n    let irow = Math.floor(ii / trayProps.ncols);\n    let icol = ii - irow * trayProps.ncols;\n    avgRow = avgRow + irow * rawWeight;\n    avgCol = avgCol + icol * rawWeight;\n}\navgRow = trayProps.rowScale * avgRow / totalWeight;\navgCol = trayProps.colScale * avgCol / totalWeight;\n\ntray.rowPos.value = Math.round(1000 * avgRow) / 1000;\ntray.colPos.value = Math.round(1000 * avgCol) / 1000;\ntray.weight.value = Math.round(1000 * totalWeight) / 1000;\ntray.timeStamp = new Date().getTime();\ntray.speed.value = 0.0;\n\nvar oldPos = context.get(\"oldPos\");\nif (oldPos != null) \n{\n    let deltatT = (tray.timeStamp - oldPos.timeStamp) / 1000;\n    let drow = avgRow - oldPos.avgRow;\n    let dcol = avgCol - oldPos.avgCol;\n    tray.speed.value = Math.sqrt(drow * drow + dcol * dcol) / deltatT;\n    tray.speed.value = Math.round(1000 * tray.speed.value) / 1000;\n\n    let oldPos.avgRow = avgRow;\n    let oldPos.avgCol = avgCol;\n    context.set(\"oldPos\", oldPos);\n}\nelse\n    \n\ntray.watchdog.value = tray.watchdog.value + 1;\nif (tray.watchdog.value > 32766) tray.watchdog.value = 0;\n\nlet topic = 'newReading';\nreturn {topic:topic, payload:tray};\n",
-        "outputs": 1,
-        "noerr": 14,
-        "initialize": "// Code added here will be run once\n// whenever the node is started.\nlet oldPos = null;\ncontext.set(\"oldPos\",oldPos);",
+        "func": "let tray = flow.get('tray');\nlet caltray = flow.get('caltray');\nif ((tray == null ) || (caltray == null )) return null;\nlet trayProps = flow.get('trayProps');\n\nlet padData = [];\nlet npts = trayProps.nrows * trayProps.ncols;\nfor (let ii = 0; ii < npts; ++ii)\n{\n    let dataView  = new DataView(new ArrayBuffer(2));\n    for (let ib = 0; ib < 2; ++ib)   dataView.setUint8(ib, msg.payload[(ii * 2) + 1 - ib]);\n    padData.push(dataView.getInt16(0));\n}\nlet dataMsg = null;\nlet calMsg = null;\nswitch (tray.calState.value) \n{\n    case 0:\n        let totalWeight = 0.0;\n        let avgRow = 0.0;\n        let avgCol = 0.0;\n        for (let ii = 0; ii < npts; ++ii)\n        {\n            let rawWeight = caltray.calWeight.value * (padData[ii] - caltray.padZeroData.value[1][ii]) / (caltray.padCalData.value[1][ii] - caltray.padZeroData.value[1][ii]);\n            totalWeight = totalWeight + rawWeight;\n            let irow = Math.floor(ii / trayProps.ncols);\n            let icol = ii - irow * trayProps.ncols;\n            avgRow = avgRow + irow * rawWeight;\n            avgCol = avgCol + icol * rawWeight;\n        }\n        avgRow = trayProps.rowScale * avgRow / totalWeight;\n        avgCol = trayProps.colScale * avgCol / totalWeight;\n\n        tray.rowPos.value = Math.round(1000 * avgRow) / 1000;\n        tray.colPos.value = Math.round(1000 * avgCol) / 1000;\n        tray.weight.value = Math.round(1000 * totalWeight) / 1000;\n        tray.timeStamp = new Date().getTime();\n        tray.speed.value = 0.0;\n\n        let oldPos = context.get(\"oldPos\");\n        tray.speed.value = 0.0;\n        if (oldPos.timeStamp > 0) \n        {\n            let deltatT = (tray.timeStamp - oldPos.timeStamp) / 1000;\n            let drow = avgRow - oldPos.avgRow;\n            let dcol = avgCol - oldPos.avgCol;\n            tray.speed.value = Math.sqrt(drow * drow + dcol * dcol) / deltatT;\n            tray.speed.value = Math.round(1000 * tray.speed.value) / 1000;\n        }\n        oldPos.avgRow = avgRow;\n        oldPos.avgCol = avgCol;\n        oldPos.timeStamp = tray.timeStamp;\n        context.set(\"oldPos\", oldPos);\n        \n        tray.watchdog.value = tray.watchdog.value + 1;\n        if (tray.watchdog.value > 32766) tray.watchdog.value = 0;\n        dataMsg = {topic:'newReading', payload:true};\n        calMsg = null;\n        break;\n    case 1: // Pause\n        dataMsg = null;\n        calMsg = null;\n        break;\n    case 2: // Zero\n        caltray.padZeroData.value = [[],[]];\n        for (let ii = 0; ii < npts; ++ii)\n        {\n            caltray.padZeroData.value[0].push(ii);\n            caltray.padZeroData.value[1].push(padData[ii]);\n        }\n        dataMsg = null;\n        calMsg = {topic:'zeroCal', payload:true};\n        break;\n    case 3:  // Flat weight\n        caltray.padCalData.value = [[],[]];\n        for (let ii = 0; ii < npts; ++ii)\n        {\n            caltray.padCalData.value[0].push(ii);\n            caltray.padCalData.value[1].push(padData[ii]);\n        }\n        caltray.calWeight.value = tray.calWeight.value\n        dataMsg = null;\n        calMsg = {topic:'flatCal', payload:true};\n        break;\n    default:\n        dataMsg = null;\n        calMsg = null;\n        break;\n\n}\nreturn [dataMsg,calMsg]\n",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "// Code added here will be run once\n// whenever the node is started.\nlet oldPos = {timeStamp:-1,avgRow:-1,avgCol:-1}\ncontext.set(\"oldPos\",oldPos);",
         "finalize": "",
         "libs": [],
         "x": 740,
         "y": 500,
         "wires": [
             [
-                "bd689917f49525df"
+                "2c81c8b5ebd1f7e6"
+            ],
+            [
+                "8ae3046257b6ed95"
             ]
         ]
     },
@@ -670,7 +675,8 @@
         "name": "trayControl In",
         "links": [
             "6c29d83d29cb0f0b",
-            "961510dc1e7a036a"
+            "961510dc1e7a036a",
+            "9051f95b43e53d7f"
         ],
         "x": 1355,
         "y": 240,
@@ -690,7 +696,8 @@
             "71df6ca08438be25",
             "8f466a48843f0a7f",
             "bd491678f8e24259",
-            "974629da19a525ea"
+            "974629da19a525ea",
+            "1a432ead48438c72"
         ],
         "x": 1175,
         "y": 300,
@@ -858,22 +865,6 @@
         ]
     },
     {
-        "id": "bd689917f49525df",
-        "type": "debug",
-        "z": "b438688e0b293257",
-        "name": "debug 1",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "false",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 880,
-        "y": 600,
-        "wires": []
-    },
-    {
         "id": "d02e538aeece965b",
         "type": "split",
         "z": "b438688e0b293257",
@@ -910,23 +901,6 @@
                 "961510dc1e7a036a"
             ]
         ]
-    },
-    {
-        "id": "fbd53d27a34f9a87",
-        "type": "debug",
-        "z": "b438688e0b293257",
-        "name": "debug 2",
-        "active": true,
-        "tosidebar": true,
-        "console": false,
-        "tostatus": false,
-        "complete": "true",
-        "targetType": "full",
-        "statusVal": "",
-        "statusType": "auto",
-        "x": 1220,
-        "y": 460,
-        "wires": []
     },
     {
         "id": "d2cda47f6579b88a",
@@ -966,5 +940,95 @@
                 "b15d260b572e07f4"
             ]
         ]
+    },
+    {
+        "id": "8ae3046257b6ed95",
+        "type": "function",
+        "z": "b438688e0b293257",
+        "name": "Publish cal tray",
+        "func": "if (!msg.payload) return null;\nlet caltray = flow.get('caltray');\nif (caltray == null) return null;\nlet newMsgTopic = flow.get('trayProps').box + '/tray/' + flow.get('trayProps').caltype + '/' + flow.get('trayProps').name + '/reading';\nreturn {topic: newMsgTopic, payload: JSON.stringify(caltray)};;\n",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 940,
+        "y": 560,
+        "wires": [
+            [
+                "9051f95b43e53d7f",
+                "cb65282a408acbb2"
+            ]
+        ]
+    },
+    {
+        "id": "9051f95b43e53d7f",
+        "type": "link out",
+        "z": "b438688e0b293257",
+        "name": "publishCal tray out",
+        "mode": "link",
+        "links": [
+            "f5153c8898e1a608"
+        ],
+        "x": 1175,
+        "y": 560,
+        "wires": []
+    },
+    {
+        "id": "cb65282a408acbb2",
+        "type": "delay",
+        "z": "b438688e0b293257",
+        "name": "",
+        "pauseType": "delay",
+        "timeout": "2",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "1",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "allowrate": false,
+        "outputs": 1,
+        "x": 1100,
+        "y": 640,
+        "wires": [
+            [
+                "eaa1a56dc18c10b1"
+            ]
+        ]
+    },
+    {
+        "id": "eaa1a56dc18c10b1",
+        "type": "function",
+        "z": "b438688e0b293257",
+        "name": "Stat calState to Pause",
+        "func": "let tray = flow.get('tray');\nif (tray == null) return null;\ntray.calState.value = 1;\nreturn {topic:\"calStatePause\", payload:true};\n",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1280,
+        "y": 640,
+        "wires": [
+            [
+                "1a432ead48438c72"
+            ]
+        ]
+    },
+    {
+        "id": "1a432ead48438c72",
+        "type": "link out",
+        "z": "b438688e0b293257",
+        "name": "set calState to pause out",
+        "mode": "link",
+        "links": [
+            "e90864c178e3c08e"
+        ],
+        "x": 1425,
+        "y": 640,
+        "wires": []
     }
 ]
